@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calculadora de IP e Sub-redes</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f8fafc;
+      --accent: #38bdf8;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 40px 20px;
+      background-color: var(--card);
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: var(--accent);
+    }
+
+    label {
+      display: block;
+      margin: 10px 0 5px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      font-size: 1rem;
+    }
+
+    button {
+      width: 100%;
+      background-color: var(--accent);
+      border: none;
+      padding: 12px;
+      font-size: 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--bg);
+      font-weight: bold;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background-color: #0ea5e9;
+    }
+
+    .resultado {
+      margin-top: 20px;
+      background-color: #334155;
+      padding: 20px;
+      border-radius: 12px;
+    }
+
+    .subredes {
+      margin-top: 20px;
+      background-color: #475569;
+      padding: 15px;
+      border-radius: 12px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Calculadora de IP e Sub-redes</h1>
+    <label for="ip">Endereço IP:</label>
+    <input type="text" id="ip" placeholder="Ex: 192.168.0.1">
+
+    <label for="cidr">Máscara CIDR:</label>
+    <select id="cidr">
+      <!-- Opções geradas via JS -->
+    </select>
+
+    <label for="subnets">Quantidade de Sub-redes (opcional):</label>
+    <input type="number" id="subnets" placeholder="Ex: 4" min="1">
+
+    <button onclick="calcularIP()">Calcular</button>
+
+    <div class="resultado" id="resultado"></div>
+    <div class="subredes" id="subredes"></div>
+  </div>
+
+  <script>
+    const cidrSelect = document.getElementById('cidr');
+
+    // Gera as opções do dropdown com a máscara decimal
+    for (let i = 1; i <= 32; i++) {
+      const mask = (~0 << (32 - i)) >>> 0;
+      const ip = [(mask >>> 24), (mask >> 16 & 255), (mask >> 8 & 255), (mask & 255)].join('.');
+      const option = document.createElement('option');
+      option.value = i;
+      option.text = `/${i} - ${ip}`;
+      if (i === 24) option.selected = true; // Padrão
+      cidrSelect.appendChild(option);
+    }
+
+    function decimalParaIP(d) {
+      return [(d >>> 24), (d >> 16 & 255), (d >> 8 & 255), (d & 255)].join('.');
+    }
+
+    function calcularIP() {
+      const ip = document.getElementById('ip').value.trim();
+      const cidr = parseInt(document.getElementById('cidr').value);
+      const qtdSubnets = parseInt(document.getElementById('subnets').value);
+      const res = document.getElementById('resultado');
+      const subDiv = document.getElementById('subredes');
+      subDiv.innerHTML = "";
+
+      if (!ip || isNaN(cidr) || cidr < 1 || cidr > 32) {
+        res.innerHTML = "Insira um IP e CIDR válidos.";
+        return;
+      }
+
+      const partes = ip.split('.').map(Number);
+      if (partes.length !== 4 || partes.some(p => p < 0 || p > 255)) {
+        res.innerHTML = "Formato de IP inválido.";
+        return;
+      }
+
+      const ipDecimal = (partes[0]<<24) | (partes[1]<<16) | (partes[2]<<8) | partes[3];
+      const mascara = cidr === 0 ? 0 : (~0 << (32 - cidr)) >>> 0;
+      const rede = ipDecimal & mascara;
+      const broadcast = rede | (~mascara >>> 0);
+      const primeiro = rede + 1;
+      const ultimo = broadcast - 1;
+      const totalHosts = cidr >= 31 ? 0 : (2 ** (32 - cidr)) - 2;
+
+      res.innerHTML = `
+        <strong>Endereço IP:</strong> ${ip}<br>
+        <strong>Máscara:</strong> ${decimalParaIP(mascara)} (${cidr})<br>
+        <strong>Rede:</strong> ${decimalParaIP(rede)}<br>
+        <strong>Broadcast:</strong> ${decimalParaIP(broadcast)}<br>
+        <strong>Primeiro IP:</strong> ${decimalParaIP(primeiro)}<br>
+        <strong>Último IP:</strong> ${decimalParaIP(ultimo)}<br>
+        <strong>Total de Hosts:</strong> ${totalHosts}
+      `;
+
+      if (!isNaN(qtdSubnets) && qtdSubnets > 0) {
+        let bitsNecessarios = Math.ceil(Math.log2(qtdSubnets));
+        let novaCIDR = cidr + bitsNecessarios;
+
+        if (novaCIDR > 32) {
+          subDiv.innerHTML = "<strong>Erro:</strong> Número excessivo de sub-redes para esse CIDR.";
+          return;
+        }
+
+        let novaMascara = (~0 << (32 - novaCIDR)) >>> 0;
+        let bloco = 2 ** (32 - novaCIDR);
+        let saida = `<strong>Nova máscara:</strong> ${decimalParaIP(novaMascara)} (${novaCIDR})<br><br>`;
+        saida += `<strong>Sub-redes:</strong><br><pre>`;
+
+        for (let i = 0; i < qtdSubnets; i++) {
+          const net = rede + (i * bloco);
+          const bc = net + bloco - 1;
+          const fst = net + 1;
+          const lst = bc - 1;
+          saida += `Rede ${i+1}: ${decimalParaIP(net)} - Broadcast: ${decimalParaIP(bc)} - Válidos: ${decimalParaIP(fst)} a ${decimalParaIP(lst)}\n`;
+        }
+        saida += `</pre>`;
+        subDiv.innerHTML = saida;
+      }
+    }
+  </script>
+</body>
+</html>
